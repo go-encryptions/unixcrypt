@@ -10,6 +10,15 @@ import (
 // implementation this package was extracted from, plus the canonical
 // OpenBSD bcrypt.c test vectors for the bcrypt cases.
 
+// must unwraps a (hash, error) pair; an error aborts the test with a panic
+// naming it (Go does not allow must(t, f()) to spread f's two results).
+func must(s string, err error) string {
+	if err != nil {
+		panic("unexpected error: " + err.Error())
+	}
+	return s
+}
+
 func TestMD5Crypt(t *testing.T) {
 	got := MD5Crypt("secret", "abc123")
 	want := "$1$abc123$5IJcAgUIzNOMrV9cXyMFd1"
@@ -32,7 +41,7 @@ func TestMD5CryptLongPassword(t *testing.T) {
 }
 
 func TestSHA256CryptDefault(t *testing.T) {
-	got := SHA256Crypt("secret", "abc123", 0)
+	got := must(SHA256Crypt("secret", "abc123", 0))
 	want := "$5$abc123$wRJRuAN8mQOchT827qNg5d1eE/hXqPDshKnDFtr5Ny2"
 	if got != want {
 		t.Errorf("SHA256Crypt(rounds=0) = %q, want %q", got, want)
@@ -40,7 +49,7 @@ func TestSHA256CryptDefault(t *testing.T) {
 }
 
 func TestSHA512CryptDefault(t *testing.T) {
-	got := SHA512Crypt("secret", "abc123", 0)
+	got := must(SHA512Crypt("secret", "abc123", 0))
 	want := "$6$abc123$658Dwx.o8ZaF5yCkRyY/MrvTU271tISGpwvd6zNaAjewb8ayeuf4FxTkJ60ipw4l7UGpyAJy40AGqB3EH4P3L0"
 	if got != want {
 		t.Errorf("SHA512Crypt(rounds=0) = %q, want %q", got, want)
@@ -48,7 +57,7 @@ func TestSHA512CryptDefault(t *testing.T) {
 }
 
 func TestSHA512CryptExplicitRounds(t *testing.T) {
-	got := SHA512Crypt("secret", "abc123", 10000)
+	got := must(SHA512Crypt("secret", "abc123", 10000))
 	want := "$6$rounds=10000$abc123$Z5HMbHsuGm9Y/O40xGGRe46SY51vnbt/dNLda1MMNMYi6vNmSYjFcGCre8GBI36M7KlPACMuZ7IiXkKj8OZRt/"
 	if got != want {
 		t.Errorf("SHA512Crypt(rounds=10000) = %q, want %q", got, want)
@@ -56,7 +65,7 @@ func TestSHA512CryptExplicitRounds(t *testing.T) {
 }
 
 func TestSHA256CryptExplicitRounds(t *testing.T) {
-	got := SHA256Crypt("secret", "abc123", 100000)
+	got := must(SHA256Crypt("secret", "abc123", 100000))
 	want := "$5$rounds=100000$abc123$BAypCR.piwV2RkOutF15YIYEZOxdkqWo1rCdmX0Rlf3"
 	if got != want {
 		t.Errorf("SHA256Crypt(rounds=100000) = %q, want %q", got, want)
@@ -68,12 +77,12 @@ func TestSHA512CryptRoundsClampedToMin(t *testing.T) {
 	// 1000 — confirmed against real `openssl passwd -6 -salt
 	// 'rounds=500$abc123'`, which produces byte-identical output to an
 	// explicit rounds=1000 request.
-	got500 := SHA512Crypt("secret", "abc123", 500)
+	got500 := must(SHA512Crypt("secret", "abc123", 500))
 	want := "$6$rounds=1000$abc123$rqoM2yfLyxmA/mlZhhi/gN4FjF2Rgy5kekfNvVVhAmZQkbzRdjsSmtUogL1oCT.r88ujPiuPRR2DeBgg67rbe0"
 	if got500 != want {
 		t.Errorf("SHA512Crypt(rounds=500) = %q, want %q (clamped to 1000)", got500, want)
 	}
-	got1000 := SHA512Crypt("secret", "abc123", 1000)
+	got1000 := must(SHA512Crypt("secret", "abc123", 1000))
 	if got1000 != want {
 		t.Errorf("SHA512Crypt(rounds=1000) = %q, want %q", got1000, want)
 	}
@@ -85,12 +94,12 @@ func TestSHA512CryptExplicitDefaultRoundsStillPrintsPrefix(t *testing.T) {
 	// even though 5000 is also the implicit default used when rounds==0
 	// (which omits the prefix entirely). The digest itself is identical
 	// either way — only the prefix differs.
-	explicit := SHA512Crypt("secret", "abc123", 5000)
+	explicit := must(SHA512Crypt("secret", "abc123", 5000))
 	want := "$6$rounds=5000$abc123$658Dwx.o8ZaF5yCkRyY/MrvTU271tISGpwvd6zNaAjewb8ayeuf4FxTkJ60ipw4l7UGpyAJy40AGqB3EH4P3L0"
 	if explicit != want {
 		t.Errorf("SHA512Crypt(rounds=5000) = %q, want %q", explicit, want)
 	}
-	implicit := SHA512Crypt("secret", "abc123", 0)
+	implicit := must(SHA512Crypt("secret", "abc123", 0))
 	if strings.Contains(implicit, "rounds=") {
 		t.Errorf("SHA512Crypt(rounds=0) = %q, want no rounds= prefix", implicit)
 	}
