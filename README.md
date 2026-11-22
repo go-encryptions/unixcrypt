@@ -34,7 +34,7 @@ go get github.com/go-encryptions/unixcrypt
 ## API
 
 ```go
-func MD5Crypt(password, salt string) string
+func MD5Crypt(password, salt string) (string, error)
 func SHA256Crypt(password, salt string, rounds int) (string, error)
 func SHA512Crypt(password, salt string, rounds int) (string, error)
 func Bcrypt(password, prefix string, cost int, salt []byte) (string, error)
@@ -50,6 +50,7 @@ const MaxRounds = 999999999
 const MaxPasswordLen = 511
 
 var ErrPasswordTooLong error
+var ErrBadSalt error
 ```
 
 - **Password length cap (SHA-crypt).** SHA-crypt's cost is quadratic in the
@@ -90,6 +91,11 @@ var ErrPasswordTooLong error
   `BcryptStrict` returns `ErrPasswordTooLong` above `BcryptMaxPasswordLen`
   (72) bytes instead. A NUL byte inside a bcrypt password does not end it,
   unlike C `crypt(3)`, which stops at the first NUL.
+- Salts follow crypt(3), as `openssl passwd` does: the salt ends at its first
+  `$`, is truncated to 8 characters (MD5-crypt) or 16 (SHA-crypt), and the
+  kept part must be `[./A-Za-z0-9]`, otherwise `MD5Crypt`/`SHA256Crypt`/
+  `SHA512Crypt` return `ErrBadSalt`. SHA-crypt also accepts `rounds=N$salt`
+  as the salt when the `rounds` argument is `0` (an error if both are given).
 - `Bcrypt` takes a raw 16-byte salt directly; `BcryptFromMCF` is a
   convenience for a caller that already has a pre-formed
   `"<cost>$<22-char-base64>"` salt (the shape Puppet's own
