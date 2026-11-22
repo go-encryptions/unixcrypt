@@ -76,6 +76,13 @@ var ErrPasswordTooLong error
   prefix is an error) and a cost of 4-31; `BcryptFromMCF` requires the cost
   to be exactly two ASCII digits (`"+4"` and `" 4"` are refused). Both
   formerly built a malformed MCF string on request.
+- `$2x$` reproduces openwall crypt_blowfish's sign-extension bug (a password
+  byte >= 0x80 sign-extends into its key word), so legacy hashes made by
+  affected pre-2011 implementations verify; it matches the `wrapper.c` vector
+  for `"\xa3"`. For passwords without such bytes it equals `$2y$`. `$2x$` is
+  for verifying old hashes only: never use it to create new ones. `$2a$`,
+  `$2b$` and `$2y$` use the corrected algorithm (crypt_blowfish's extra `$2a$`
+  safety measure for some `\xff` passwords is not implemented).
 - `Bcrypt` takes a raw 16-byte salt directly; `BcryptFromMCF` is a
   convenience for a caller that already has a pre-formed
   `"<cost>$<22-char-base64>"` salt (the shape Puppet's own
