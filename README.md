@@ -125,6 +125,18 @@ func main() {
 }
 ```
 
+## Changes in v0.3.0
+
+Below v1, a breaking change bumps the MINOR version.
+
+- **Breaking:** `MD5Crypt` now returns `(string, error)`, like the other
+  hashes, because a bad salt is refused with `ErrBadSalt`.
+- Salts are cut at the first `$`, truncated and validated as crypt(3) does;
+  SHA-crypt reads `rounds=N$` from the salt.
+- SHA-crypt refuses passwords above `MaxPasswordLen` (`ErrPasswordTooLong`).
+- bcrypt: prefix and cost are validated, `$2x$` reproduces the
+  sign-extension bug, and `BcryptStrict` refuses passwords above 72 bytes.
+
 ## Scope
 
 Deliberately narrow: the four crypt(3)/MCF formats above, nothing else.
