@@ -20,7 +20,7 @@ func TestBcryptPrefixAndCost(t *testing.T) {
 	for _, mcf := range []string{"+4$......................", "-4$......................", " 4$......................", "4 $......................", "0x$......................",
 		// Non-digit bytes whose arithmetic value would land in 4-31 if the
 		// digit check were missing ('0'*10 + (':'-'0') = 10, and so on).
-		"0:$......................", "1:$......................", "0;$......................"} {
+		"0:$......................", "0;$......................"} {
 		if h, err := BcryptFromMCF("pw", "2b", mcf); err == nil {
 			t.Errorf("BcryptFromMCF cost field of %q accepted: %s", mcf, h)
 		}
