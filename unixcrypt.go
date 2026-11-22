@@ -399,6 +399,11 @@ func bcryptB64Encode(src []byte) []byte {
 // source here, since bcrypt's salt is raw bytes, not crypt(3)'s usual
 // printable charset; use crypto/rand directly).
 func Bcrypt(password, prefix string, cost int, salt []byte) (string, error) {
+	switch prefix {
+	case "2a", "2b", "2x", "2y":
+	default:
+		return "", fmt.Errorf("unixcrypt: bcrypt prefix must be one of 2a, 2b, 2x, 2y, got %q", prefix)
+	}
 	if len(salt) != 16 {
 		return "", fmt.Errorf("unixcrypt: bcrypt salt must be exactly 16 bytes, got %d", len(salt))
 	}
@@ -435,6 +440,8 @@ func Bcrypt(password, prefix string, cost int, salt []byte) (string, error) {
 	return "$" + prefix + "$" + cs + "$" + saltStr + string(hsh), nil
 }
 
+func isDigit(c byte) bool { return c >= '0' && c <= '9' }
+
 // BcryptFromMCF reproduces crypt(3) bcrypt for a caller that already has a
 // pre-formed MCF salt of the form "<cost>$<22-char base64>" — the shape
 // Puppet's own pw_hash(password, type, salt) function takes as its third
@@ -443,10 +450,11 @@ func BcryptFromMCF(password, prefix, mcfSalt string) (string, error) {
 	if len(mcfSalt) < 25 || mcfSalt[2] != '$' {
 		return "", fmt.Errorf("unixcrypt: invalid bcrypt salt %q, want \"<cost>$<22-char-base64>\"", mcfSalt)
 	}
-	cost, err := strconv.Atoi(mcfSalt[:2])
-	if err != nil {
-		return "", fmt.Errorf("unixcrypt: invalid bcrypt cost in salt %q", mcfSalt)
+	// Exactly two ASCII digits: strconv.Atoi would also accept a sign ("+4").
+	if !isDigit(mcfSalt[0]) || !isDigit(mcfSalt[1]) {
+		return "", fmt.Errorf("unixcrypt: invalid bcrypt cost in salt %q, want two digits", mcfSalt)
 	}
+	cost := int(mcfSalt[0]-'0')*10 + int(mcfSalt[1]-'0')
 	salt22 := mcfSalt[3:25]
 	// A 22-character bcrypt-base64 salt always decodes to exactly 16 bytes.
 	decoded := bcryptB64Decode(salt22)
