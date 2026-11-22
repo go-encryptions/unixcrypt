@@ -71,8 +71,16 @@ func b64From24(b2, b1, b0 byte, n int, out []byte) []byte {
 
 // MD5Crypt computes the classic MD5-crypt ($1$) hash of password with salt
 // (created by Poul-Henning Kamp for FreeBSD, later adopted by glibc).
-func MD5Crypt(password, salt string) string {
+//
+// Like crypt(3), the salt ends at its first '$' and is truncated to 8
+// characters; the truncated salt must consist of SaltChars, otherwise
+// ErrBadSalt is returned.
+func MD5Crypt(password, salt string) (string, error) {
 	const magic = "$1$"
+	salt, err := normalizeSalt(salt, 8)
+	if err != nil {
+		return "", err
+	}
 	pw := []byte(password)
 	s := []byte(salt)
 
@@ -133,7 +141,37 @@ func MD5Crypt(password, salt string) string {
 	out = b64From24(sum[3], sum[9], sum[15], 4, out)
 	out = b64From24(sum[4], sum[10], sum[5], 4, out)
 	out = b64From24(0, 0, sum[11], 2, out)
-	return string(out)
+	return string(out), nil
+}
+
+// ErrBadSalt is returned for a salt that crypt(3) would not accept.
+var ErrBadSalt = errors.New("unixcrypt: invalid salt")
+
+// normalizeSalt applies crypt(3)'s salt rules: the salt ends at its first
+// '$', is cut to max characters, and must then consist of SaltChars.
+func normalizeSalt(salt string, max int) (string, error) {
+	if i := strings.IndexByte(salt, '$'); i >= 0 {
+		salt = salt[:i]
+	}
+	if len(salt) > max {
+		salt = salt[:max]
+	}
+	if !ValidSaltChars(salt) {
+		return "", fmt.Errorf("%w: characters outside [./A-Za-z0-9]", ErrBadSalt)
+	}
+	return salt, nil
+}
+
+func isAllDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // --- SHA-crypt ($5$/$6$) -----------------------------------------------------
@@ -217,13 +255,32 @@ func shaCrypt(password, salt string, rounds int, is512 bool) (string, error) {
 		newHash, magic, hlen = sha256.New, "$5$", 32
 	}
 
+	// OpenSSL and libxcrypt accept a "rounds=N$" prefix inside the salt.
+	if rest, ok := strings.CutPrefix(salt, "rounds="); ok {
+		if num, tail, found := strings.Cut(rest, "$"); found && isAllDigits(num) {
+			if rounds != 0 {
+				return "", fmt.Errorf("%w: rounds given both as a parameter and in the salt", ErrBadSalt)
+			}
+			v, err := strconv.Atoi(num)
+			if err != nil || v == 0 {
+				// Out of range or zero: clampRounds clamps any non-zero value;
+				// zero would read as "unspecified", so pin it to the minimum.
+				v = MaxRounds
+				if err == nil {
+					v = MinRounds
+				}
+			}
+			rounds, salt = v, tail
+		}
+	}
 	n, explicit := clampRounds(rounds)
 
+	salt, err := normalizeSalt(salt, 16)
+	if err != nil {
+		return "", err
+	}
 	pw := []byte(password)
 	s := []byte(salt)
-	if len(s) > 16 {
-		s = s[:16]
-	}
 
 	b := newHash()
 	b.Write(pw)

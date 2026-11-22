@@ -20,7 +20,7 @@ func must(s string, err error) string {
 }
 
 func TestMD5Crypt(t *testing.T) {
-	got := MD5Crypt("secret", "abc123")
+	got := must(MD5Crypt("secret", "abc123"))
 	want := "$1$abc123$5IJcAgUIzNOMrV9cXyMFd1"
 	if got != want {
 		t.Errorf("MD5Crypt = %q, want %q", got, want)
@@ -30,12 +30,12 @@ func TestMD5Crypt(t *testing.T) {
 func TestMD5CryptLongPassword(t *testing.T) {
 	// Exercises the >16-byte branches of the inner digest-folding loops
 	// (real crypt(3) MD5-crypt folds the password in 16-byte chunks).
-	got := MD5Crypt("this-password-is-longer-than-sixteen-bytes", "abc123")
+	got := must(MD5Crypt("this-password-is-longer-than-sixteen-bytes", "abc123"))
 	if len(got) == 0 || got[:3] != "$1$" {
 		t.Fatalf("MD5Crypt(long password) = %q, want a well-formed $1$ hash", got)
 	}
 	// Determinism: hashing the same long password+salt twice must agree.
-	if got2 := MD5Crypt("this-password-is-longer-than-sixteen-bytes", "abc123"); got != got2 {
+	if got2 := must(MD5Crypt("this-password-is-longer-than-sixteen-bytes", "abc123")); got != got2 {
 		t.Errorf("MD5Crypt(long password) not deterministic: %q vs %q", got, got2)
 	}
 }
