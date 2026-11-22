@@ -415,6 +415,11 @@ func Bcrypt(password, prefix string, cost int, salt []byte) (string, error) {
 	// NewSaltedCipher (which only errors on a zero-length key) cannot fail
 	// here.
 	key := append([]byte(password), 0)
+	if prefix == "2x" {
+		// $2x$ is the pre-2011 crypt_blowfish sign-extension bug; see
+		// signExtendedKey.
+		key = signExtendedKey(key)
+	}
 	c, err := blowfish.NewSaltedCipher(key, salt)
 	if err != nil {
 		return "", fmt.Errorf("unixcrypt: %w", err)
@@ -438,6 +443,36 @@ func Bcrypt(password, prefix string, cost int, salt []byte) (string, error) {
 		cs = "0" + cs
 	}
 	return "$" + prefix + "$" + cs + "$" + saltStr + string(hsh), nil
+}
+
+// signExtendedKey returns the 72-byte key schedule input that reproduces the
+// "$2x$" (sign extension bug) semantics of openwall's crypt_blowfish, which
+// is what the prefix names: older revisions built each 32-bit key word with
+// tmp = (tmp << 8) | (BF_word_signed)(signed char)*ptr, so a byte >= 0x80
+// sign-extended and overwrote the bytes already shifted into the word (see
+// BF_set_key in crypt_blowfish, as carried by libxcrypt's
+// lib/crypt-bcrypt.c, "Prefix $2x$: bug = 1, safety = 0").
+//
+// The key only enters Eksblowfish by being XORed into the 18-word P array,
+// cycling over password+NUL, so the buggy words can be handed to the standard
+// key schedule as an equivalent 18*4-byte key. key is the password plus its
+// terminating NUL. For a password without bytes >= 0x80 the result is the
+// ordinary key, cycled out to 72 bytes.
+func signExtendedKey(key []byte) []byte {
+	out := make([]byte, 0, 72)
+	pos := 0
+	for i := 0; i < 18; i++ {
+		var w uint32
+		for j := 0; j < 4; j++ {
+			w <<= 8
+			w |= uint32(int32(int8(key[pos])))
+			if pos++; pos == len(key) {
+				pos = 0
+			}
+		}
+		out = append(out, byte(w>>24), byte(w>>16), byte(w>>8), byte(w))
+	}
+	return out
 }
 
 func isDigit(c byte) bool { return c >= '0' && c <= '9' }
