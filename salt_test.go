@@ -3,6 +3,7 @@ package unixcrypt
 import (
 	"errors"
 	"testing"
+	"time"
 )
 
 // Reference values are real `openssl passwd` output (OpenSSL 3.5.8).
@@ -90,9 +91,21 @@ func TestSHACryptSaltRoundsEdge(t *testing.T) {
 	}
 	// A "rounds=" salt without a terminating '$' or with a non-numeric
 	// count is just a salt, and '=' is not a salt character.
-	for _, salt := range []string{"rounds=1000", "rounds=x$ab"} {
-		if _, err := SHA256Crypt("pw", salt, 0); !errors.Is(err, ErrBadSalt) {
-			t.Errorf("salt %q: err = %v, want ErrBadSalt", salt, err)
+	// The call runs under a deadline: a regression that read "x" as a round
+	// count would hash for a billion rounds instead of failing.
+	for _, salt := range []string{"rounds=1000", "rounds=x$ab", "rounds=+5$ab", "rounds=-5$ab"} {
+		done := make(chan error, 1)
+		go func() {
+			_, err := SHA256Crypt("pw", salt, 0)
+			done <- err
+		}()
+		select {
+		case err := <-done:
+			if !errors.Is(err, ErrBadSalt) {
+				t.Errorf("salt %q: err = %v, want ErrBadSalt", salt, err)
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatalf("salt %q: still hashing after 3s, the count was read as a number", salt)
 		}
 	}
 }
