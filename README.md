@@ -35,8 +35,8 @@ go get github.com/go-encryptions/unixcrypt
 
 ```go
 func MD5Crypt(password, salt string) string
-func SHA256Crypt(password, salt string, rounds int) string
-func SHA512Crypt(password, salt string, rounds int) string
+func SHA256Crypt(password, salt string, rounds int) (string, error)
+func SHA512Crypt(password, salt string, rounds int) (string, error)
 func Bcrypt(password, prefix string, cost int, salt []byte) (string, error)
 func BcryptFromMCF(password, prefix, mcfSalt string) (string, error)
 
@@ -46,7 +46,18 @@ func ValidSaltChars(s string) bool
 const DefaultRounds = 5000
 const MinRounds = 1000
 const MaxRounds = 999999999
+const MaxPasswordLen = 511
+
+var ErrPasswordTooLong error
 ```
+
+- **Password length cap (SHA-crypt).** SHA-crypt's cost is quadratic in the
+  password length, so `SHA256Crypt`/`SHA512Crypt` return `ErrPasswordTooLong`
+  for a password above `MaxPasswordLen` (511 bytes; libxcrypt's
+  `CRYPT_MAX_PASSPHRASE_SIZE` is 512 counting the terminating NUL) instead of
+  burning CPU or truncating. Callers that take `rounds` (up to `MaxRounds`) or
+  a bcrypt cost (up to 31) from untrusted input should apply their own policy
+  cap first: those bounds are caller-controlled CPU by design.
 
 - `MD5Crypt`/`SHA256Crypt`/`SHA512Crypt` take a plain salt string and return
   the full `$id$salt$hash` (or, for SHA-crypt with an explicit round count,
@@ -83,8 +94,10 @@ import (
 
 func main() {
 	salt, _ := unixcrypt.RandomSalt(16)
-	fmt.Println(unixcrypt.SHA512Crypt("hunter2", salt, 0))       // real crypt(3) default: 5000 rounds, no prefix
-	fmt.Println(unixcrypt.SHA512Crypt("hunter2", salt, 100000))  // $6$rounds=100000$...
+	h, _ := unixcrypt.SHA512Crypt("hunter2", salt, 0) // real crypt(3) default: 5000 rounds, no prefix
+	fmt.Println(h)
+	h, _ = unixcrypt.SHA512Crypt("hunter2", salt, 100000) // $6$rounds=100000$...
+	fmt.Println(h)
 }
 ```
 

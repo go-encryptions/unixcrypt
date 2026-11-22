@@ -12,6 +12,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/sha512"
+	"errors"
 	"fmt"
 	"hash"
 	"strconv"
@@ -157,14 +158,31 @@ const (
 // explicitly requested a round count. Any other rounds value (even 5000
 // given explicitly) is clamped to [MinRounds, MaxRounds] and the clamped
 // value is always printed, even if clamping left it at 5000.
-func SHA256Crypt(password, salt string, rounds int) string {
+//
+// It returns ErrPasswordTooLong for a password longer than MaxPasswordLen:
+// SHA-crypt's cost is quadratic in the password length (Drepper's DP digest
+// hashes the password len(pw) times, and every round hashes the len(pw)-byte
+// P sequence), so an uncapped password is a CPU denial of service (same class
+// as glibc CVE-2016-20013).
+func SHA256Crypt(password, salt string, rounds int) (string, error) {
 	return shaCrypt(password, salt, rounds, false)
 }
 
 // SHA512Crypt is SHA256Crypt's sibling for $6$.
-func SHA512Crypt(password, salt string, rounds int) string {
+func SHA512Crypt(password, salt string, rounds int) (string, error) {
 	return shaCrypt(password, salt, rounds, true)
 }
+
+// MaxPasswordLen is the longest password SHA256Crypt and SHA512Crypt accept,
+// in bytes. libxcrypt defines CRYPT_MAX_PASSPHRASE_SIZE as 512 and counts the
+// terminating NUL in it ("Passphrases longer than this (counting the
+// terminating NUL) are not supported", lib/crypt.h.in), which leaves 511.
+const MaxPasswordLen = 511
+
+// ErrPasswordTooLong is returned for a password above the algorithm's bound
+// instead of silently truncating it (a truncated password would verify for
+// every password sharing its prefix).
+var ErrPasswordTooLong = errors.New("unixcrypt: password too long")
 
 // clampRounds applies real crypt(3)'s own rounds semantics: requested == 0
 // means unspecified (use DefaultRounds, explicit reports false so the
@@ -186,7 +204,10 @@ func clampRounds(requested int) (n int, explicit bool) {
 	return n, true
 }
 
-func shaCrypt(password, salt string, rounds int, is512 bool) string {
+func shaCrypt(password, salt string, rounds int, is512 bool) (string, error) {
+	if len(password) > MaxPasswordLen {
+		return "", fmt.Errorf("%w: %d bytes, limit %d", ErrPasswordTooLong, len(password), MaxPasswordLen)
+	}
 	var newHash func() hash.Hash
 	var magic string
 	var hlen int
@@ -275,7 +296,7 @@ func shaCrypt(password, salt string, rounds int, is512 bool) string {
 	} else {
 		out = shaEncode256(cur, out)
 	}
-	return string(out)
+	return string(out), nil
 }
 
 // cryptSeq builds a length-n byte sequence by repeating the hlen-byte digest.
