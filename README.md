@@ -61,6 +61,10 @@ const MaxRounds = 999999999
   even though the digest itself is identical either way. This distinction
   is real crypt(3) behavior, confirmed against `openssl passwd`, not an
   invented convenience.
+- `Bcrypt` accepts only the prefixes `2a`, `2b`, `2x` and `2y` (any other
+  prefix is an error) and a cost of 4-31; `BcryptFromMCF` requires the cost
+  to be exactly two ASCII digits (`"+4"` and `" 4"` are refused). Both
+  formerly built a malformed MCF string on request.
 - `Bcrypt` takes a raw 16-byte salt directly; `BcryptFromMCF` is a
   convenience for a caller that already has a pre-formed
   `"<cost>$<22-char-base64>"` salt (the shape Puppet's own
