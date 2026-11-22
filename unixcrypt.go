@@ -398,6 +398,12 @@ func bcryptB64Encode(src []byte) []byte {
 // 16 raw bytes (bcrypt's own fixed salt size — RandomSalt is NOT the right
 // source here, since bcrypt's salt is raw bytes, not crypt(3)'s usual
 // printable charset; use crypto/rand directly).
+//
+// Only the first 72 bytes of the password (plus the terminating NUL) enter the
+// key schedule, so two passwords sharing their first 72 bytes hash equally;
+// that is bcrypt's own limit, kept for compatibility. Use BcryptStrict to
+// refuse longer passwords instead. A NUL byte inside the password does not
+// end it here, unlike C crypt(3), which stops at the first NUL.
 func Bcrypt(password, prefix string, cost int, salt []byte) (string, error) {
 	switch prefix {
 	case "2a", "2b", "2x", "2y":
@@ -476,6 +482,19 @@ func signExtendedKey(key []byte) []byte {
 }
 
 func isDigit(c byte) bool { return c >= '0' && c <= '9' }
+
+// BcryptMaxPasswordLen is the number of password bytes bcrypt uses.
+const BcryptMaxPasswordLen = 72
+
+// BcryptStrict is Bcrypt, except that a password longer than
+// BcryptMaxPasswordLen bytes is refused with ErrPasswordTooLong instead of
+// being silently truncated.
+func BcryptStrict(password, prefix string, cost int, salt []byte) (string, error) {
+	if len(password) > BcryptMaxPasswordLen {
+		return "", fmt.Errorf("%w: %d bytes, bcrypt uses only the first %d", ErrPasswordTooLong, len(password), BcryptMaxPasswordLen)
+	}
+	return Bcrypt(password, prefix, cost, salt)
+}
 
 // BcryptFromMCF reproduces crypt(3) bcrypt for a caller that already has a
 // pre-formed MCF salt of the form "<cost>$<22-char base64>" — the shape

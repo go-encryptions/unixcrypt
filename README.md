@@ -38,6 +38,7 @@ func MD5Crypt(password, salt string) string
 func SHA256Crypt(password, salt string, rounds int) (string, error)
 func SHA512Crypt(password, salt string, rounds int) (string, error)
 func Bcrypt(password, prefix string, cost int, salt []byte) (string, error)
+func BcryptStrict(password, prefix string, cost int, salt []byte) (string, error)
 func BcryptFromMCF(password, prefix, mcfSalt string) (string, error)
 
 func RandomSalt(n int) (string, error)
@@ -83,6 +84,12 @@ var ErrPasswordTooLong error
   for verifying old hashes only: never use it to create new ones. `$2a$`,
   `$2b$` and `$2y$` use the corrected algorithm (crypt_blowfish's extra `$2a$`
   safety measure for some `\xff` passwords is not implemented).
+- **bcrypt reads only the first 72 bytes of the password** (bcrypt's own
+  limit): `Bcrypt` silently ignores the rest, so two passwords sharing their
+  first 72 bytes hash equally. The default is unchanged for compatibility;
+  `BcryptStrict` returns `ErrPasswordTooLong` above `BcryptMaxPasswordLen`
+  (72) bytes instead. A NUL byte inside a bcrypt password does not end it,
+  unlike C `crypt(3)`, which stops at the first NUL.
 - `Bcrypt` takes a raw 16-byte salt directly; `BcryptFromMCF` is a
   convenience for a caller that already has a pre-formed
   `"<cost>$<22-char-base64>"` salt (the shape Puppet's own
