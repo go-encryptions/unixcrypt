@@ -177,8 +177,25 @@ func TestBcryptFromMCF(t *testing.T) {
 	if _, err := BcryptFromMCF("password", "2b", "xx$cgT08pfGUo9SUIIvXrIJ1u"); err == nil {
 		t.Fatal("BcryptFromMCF with a non-numeric cost: got nil error, want one")
 	}
-	if _, err := BcryptFromMCF("password", "2b", "10$tooshort"); err == nil {
-		t.Fatal("BcryptFromMCF with a too-short salt: got nil error, want one")
+}
+
+// TestBcryptFromMCFShortSaltRefused: a salt that passes the cost and '$' checks
+// but is shorter than 25 bytes must be refused by the length guard. Without it
+// the slice mcfSalt[3:25] panics, so the call recovers a panic and reports it
+// as a failure: a panic would otherwise end the test binary and hide every
+// test after this one.
+func TestBcryptFromMCFShortSaltRefused(t *testing.T) {
+	for _, salt := range []string{"", "1", "10", "10$", "10$tooshort", "10$cgT08pfGUo9SUIIvXrIJ1"} {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("BcryptFromMCF(%q) panicked: %v", salt, r)
+				}
+			}()
+			if h, err := BcryptFromMCF("password", "2b", salt); err == nil {
+				t.Errorf("BcryptFromMCF with the short salt %q: got %q and a nil error, want a refusal", salt, h)
+			}
+		}()
 	}
 }
 
